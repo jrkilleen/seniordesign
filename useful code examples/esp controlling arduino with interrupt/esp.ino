@@ -8,7 +8,7 @@
  
  Note that this sketch uses LED_BUILTIN to find the pin with the internal LED
 */
-int pin = 2;
+int pin = 2;// for esp01S can be 0 for gpio 0 or 2 for gpio 2
 void setup() {
 pinMode(pin, OUTPUT);
 }
