@@ -472,10 +472,6 @@ void setupMode() {
   });
   webServer.begin();
 
-
-
-
-
   Serial.print("Starting Access Point at \"");
   Serial.print(apSSID);
   Serial.println("\"");
@@ -570,7 +566,9 @@ void setup() {
         
     connectedToWifi = checkConnection();
 //    connectModeTest();
-//  WiFiMulti.addAP("fbivan1", "6aa4579140b89a323cd1e82e13a179e7a9f481bbc7ff4a8822b17ab684fe527b");
+    WiFi.mode(WIFI_STA);
+//    WiFiMulti.addAP("fbivan1", "6aa4579140b89a323cd1e82e13a179e7a9f481bbc7ff4a8822b17ab684fe527b");
+    WiFiMulti.addAP(ssid.c_str(), pass.c_str());
 
     Serial.println("Reading EEPROM...");
     ssid = "";
@@ -589,24 +587,19 @@ void setup() {
       }
       Serial.print("Password: ");
       Serial.println(pass);
-
-
-
-
+      
       for (int i = 0; i < 32; ++i) {
         accountusername += char(EEPROM.read(EEPROM_USERNAME_START+i));
       }
       Serial.print("Account Username: ");
       Serial.println(accountusername);
+      
       for (int i = 0; i < 32; ++i) {
         accountpass += char(EEPROM.read(EEPROM_USERPASS_START+i));
       }
       Serial.print("Account Password: ");
       Serial.println(accountpass);
 
-
-
-      
 //      WiFi.setAutoReconnect(true);
 //      WiFi.begin(ssid.c_str(), pass.c_str());
 
@@ -636,9 +629,6 @@ void setup() {
     }
     
   }else{
-    opmode = 0;
-    EEPROM.write(EEPROM_MODE, opmode);
-    EEPROM.commit();
     setupMode();
   }
   
