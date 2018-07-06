@@ -119,7 +119,9 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 }
 
 // {"type":"readytosend"}
+//{"type":"powerUpdate","timeStamp":"152788383","totalPower":"42"}
 // {"type":"restart","mode":"0"}
+// {"deviceid":"5ri09trsm5sil31ai5pa68ldh1","type":"currentTime"}
 //example: {"deviceid":"5ri09trsm5sil31ai5pa68ldh1","type":"currentTime"}
 // used to receive data from the cu
 void readCU(){
@@ -132,16 +134,34 @@ void readCU(){
 
     // check if passed string is in correct JSON format
     if (root.success()) {
-      if(strcmp(type, "powerUpdate") == 0 || strcmp(type, "currentTime") == 0){
-
+      if(strcmp(type, "powerUpdate") == 0 ){
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "powerUpdate";
+        root1["totalPower"] = root["totalPower"];
+        root1["timeStamp"] = root["timeStamp"];
+        
         // automatically relay power update and currentTime JSON objects
+        String message = "";
+        root1.printTo(message);
+    
+        message.toCharArray(outbuffer, 200);
+        Serial.print("Sending: ");
+        Serial.println(outbuffer); 
+        webSocket.sendTXT(outbuffer);
+      }else if(strcmp(type, "currentTime") == 0){
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "currentTime";
+        
         String message;
-        root.printTo(message);
+        root1.printTo(message);
         message.toCharArray(outbuffer, 100);
         Serial.print("Sending: ");
         Serial.println(outbuffer); 
         webSocket.sendTXT(outbuffer);
-             
       }else if(strcmp(type, "restart") == 0){
         // cu is telling the ESP to restart
         restart = 1;
