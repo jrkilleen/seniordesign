@@ -37,16 +37,30 @@ const int EEPROM_MODE = 321; //  0 for setup mode or 1 for connect mode
 ESP8266WiFiMulti WiFiMulti;
 WebSocketsClient webSocket;
 
+const IPAddress apIP(192, 168, 1, 1);
+const char* apSSID = "ESP8266_SETUP";
+boolean settingMode;
+String ssidList;
+const int writeableEEPROMArea = 1024;
+  
+DNSServer dnsServer;
+ESP8266WebServer webServer(80);
+String ssid;
+String pass;
+String accountusername;
+String accountpass;
+String toMSBuffer;
+
 Queue<String> mainServerInQueue = Queue<String>(10);
 int RELAY_PIN = 2;
 const int BUFFER_SIZE = 50;
 char *buffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 char *serialbuffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-char *outbuffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+char *outbuffer = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 char *wifiID = "fbivan1";
 char *wifiPass = "6aa4579140b89a323cd1e82e13a179e7a9f481bbc7ff4a8822b17ab684fe527b";
-String userID = "testaccount";
-String userPass = "testaccount";
+//String userID = "testaccount";
+//String userPass = "testaccount";
 String deviceid = "5ri09trsm5sil31ai5pa68ldh1";
 char* mainserver = "192.168.11.120";
 int bufferHeadindex = 0;
@@ -64,7 +78,7 @@ int opmode;
 int relayStatus;
 void updateConnectionStatus();
 Scheduler runner;
-Task t1(10000, TASK_FOREVER, &updateConnectionStatus);
+//Task t1(10000, TASK_FOREVER, &updateConnectionStatus);
 //
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   
@@ -87,6 +101,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     case WStype_CONNECTED:{
       Serial.printf("[WSc] Connected!\n");
       connected = 1;
+      registerDeviceWithMS();
       reqTimeFromMS();
     }
     break;
@@ -105,7 +120,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       }else if(strcmp(type, "restart") == 0){
         restart = 1;
 
-        
       }else if(strcmp(type, "relayUpdate") == 0){
           relayStatus = root["relay"];
                
@@ -231,10 +245,29 @@ void reqTimeFromMS(){
   JsonObject& root = jsonBuffer.createObject();
   root["deviceid"] = deviceid;
   root["type"] = "currentTime";
+  root["accountusername"] = accountusername.c_str();
+  root["accountpass"] = accountpass.c_str();
 
   String message;
   root.printTo(message);
-  message.toCharArray(outbuffer, 100);
+  message.toCharArray(outbuffer, 400);
+  Serial.print("Sending: ");
+  Serial.println(outbuffer); 
+  webSocket.sendTXT(outbuffer);
+}
+
+// requests the current time from the MS
+void registerDeviceWithMS(){
+  StaticJsonBuffer<200> jsonBuffer;  
+  JsonObject& root = jsonBuffer.createObject();
+  root["deviceid"] = deviceid;
+  root["type"] = "registerDevice";
+  root["accountusername"] = accountusername.c_str();
+  root["accountpass"] = accountpass.c_str();
+
+  String message;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 400);
   Serial.print("Sending: ");
   Serial.println(outbuffer); 
   webSocket.sendTXT(outbuffer);
@@ -278,12 +311,16 @@ void sendPowerMeasurementToMS(int totalPower,int timeStamp){
   root["totalPower"] = String(totalPower);
   root["timeStamp"] = String(timeStamp);
   
-  String message;
-  root.printTo(message);
-  message.toCharArray(outbuffer, 100);
-  Serial.print("Sending: ");
-  Serial.println(outbuffer); 
-  webSocket.sendTXT(outbuffer);
+//  String message;
+//  root.printTo(message);
+//  message.toCharArray(outbuffer, 100);
+//  Serial.print("Sending: ");
+//  Serial.println(outbuffer); 
+//  webSocket.sendTXT(outbuffer);
+
+  toMSBuffer = "";
+  root.printTo(toMSBuffer);
+  webSocket.sendTXT(toMSBuffer.c_str());
 }
 
 // Sends the current relay status to the cu
@@ -303,19 +340,6 @@ boolean checkInternetConnection(){
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-const IPAddress apIP(192, 168, 1, 1);
-const char* apSSID = "ESP8266_SETUP";
-boolean settingMode;
-String ssidList;
-const int writeableEEPROMArea = 1024;
-  
-DNSServer dnsServer;
-ESP8266WebServer webServer(80);
-String ssid;
-String pass;
-String accountusername;
-String accountpass;
 
 boolean restoreConfig() {
   opmode = EEPROM.read(EEPROM_MODE);
@@ -655,21 +679,17 @@ void setup() {
   runner.init();  
 
   if(opmode == 1){
-    runner.addTask(t1);
-    delay(5000);
-    t1.enable();
+//    runner.addTask(t1);
+//    delay(5000);
+//    t1.enable();
   }
   
 }
 
-
-
-
-
 void loop() {
-    runner.execute();
-    
-      // check for serial data from the cu
+//    runner.execute();
+    WiFiMulti.run();
+    // check for serial data from the cu
     readCU();
     
     // check if the ESP needs to restart
@@ -705,4 +725,4 @@ void loop() {
   //  }
   //  digitalWrite(RELAY_PIN, relayStatus);
   //  delay(1000);
-    }
+}
