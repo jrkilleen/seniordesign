@@ -140,6 +140,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       }else{      
         
       }
+      Log.notice("\n");
       
     }
     break;      
@@ -177,8 +178,7 @@ void readCU(){
         root1.printTo(message);
     
         message.toCharArray(outbuffer, 200);
-        Log.notice("Sending: ");
-        Log.notice("%s\n",outbuffer); 
+        Log.notice("Sending: %s\n",outbuffer); 
         webSocket.sendTXT(outbuffer);
       }else if(strcmp(type, "currentTime") == 0){
         StaticJsonBuffer<200> jsonBuffer;  
@@ -209,6 +209,23 @@ void readCU(){
         JsonObject& root1 = jsonBuffer.createObject();
         root1["deviceid"] = deviceid;
         root1["type"] = "relayUpdate";
+        
+        String message;
+        root1.printTo(message);
+        message.toCharArray(outbuffer, 100);
+        Log.notice("Sending: ");
+        Log.notice("%s\n",outbuffer); 
+        webSocket.sendTXT(outbuffer);
+        
+      }else if(strcmp(type, "tempUpdate") == 0){
+        // send the most recent relay status to the cu
+//        sendRelayUpdateToCU(relayStatus);
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "tempUpdate";
+        root1["timeStamp"] = root["timeStamp"];
+        root1["temp"] = root["temp"];
         
         String message;
         root1.printTo(message);
@@ -419,7 +436,7 @@ boolean checkConnection() {
       return (true);
     }
     delay(500);
-    Log.notice(".");
+//    Log.notice(".");
     count++;
   }
   connectedToInternet = false;
@@ -462,7 +479,7 @@ void connectModeSetup(){
     WiFi.mode(WIFI_STA);
     WiFiMulti.addAP(ssid.c_str(), pass.c_str());
 
-    Log.notice("Reading EEPROM...");
+    Log.notice("Reading EEPROM...\n");
     ssid = "";
     pass = "";
     accountusername = "";
@@ -473,25 +490,21 @@ void connectModeSetup(){
       for (int i = 0; i < 32; ++i) {
         ssid += char(EEPROM.read(i));
       }
-      Log.notice("SSID: ");
-      Log.notice("%s\n",ssid.c_str());
+      Log.notice("SSID: %s\n",ssid.c_str());
       for (int i = 32; i < writeableEEPROMArea; ++i) {
         pass += char(EEPROM.read(i));
       }
-      Log.notice("Password: ");
-      Log.notice("%s\n",pass.c_str());
+      Log.notice("Password: %s\n",pass.c_str());
       
       for (int i = 0; i < 32; ++i) {
         accountusername += char(EEPROM.read(EEPROM_USERNAME_START+i));
       }
-      Log.notice("Account Username: ");
-      Log.notice("%s\n",accountusername.c_str());
+      Log.notice("Account Username: %s\n",accountusername.c_str());
       
       for (int i = 0; i < 32; ++i) {
         accountpass += char(EEPROM.read(EEPROM_USERPASS_START+i));
       }
-      Log.notice("Account Password: ");
-      Log.notice("%s\n",accountpass.c_str());
+      Log.notice("Account Password: %s\n",accountpass.c_str());
 
     }
 
