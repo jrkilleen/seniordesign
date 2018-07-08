@@ -736,7 +736,6 @@ void loop() {
       // setup mode
       dnsServer.processNextRequest();
       webServer.handleClient();
-      Serial.println("BEANS");
     }else{
       WiFiMulti.run();
       webSocket.loop();
