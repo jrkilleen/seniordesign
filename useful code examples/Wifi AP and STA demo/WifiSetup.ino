@@ -240,6 +240,7 @@ void readCU(){
         JsonObject& root = jsonBuffer.createObject();        
         root["type"] = "readytosend";
         root["readytosend"] = "1";
+        root["readytosend"] = opmode;
         
 //        if(connectedToInternet){
 //          // connected to ms
@@ -725,7 +726,7 @@ void setup() {
 
   if (opmode == 1 && restoreConfig()) {
     relayStatus = EEPROM.read(EEPROM_RELAYSTATUS);
-    connectModeSetup();
+    connectModeSetup(); 
   }else{
     
     setupModeSetup();
