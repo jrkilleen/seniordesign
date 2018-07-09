@@ -22,7 +22,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const int EEPROM_RELAYSTATUS = 0;
+const int EEPROM_FIRST_BOOT_STATUS = 0;
 const int EEPROM_SSID_START = 1;
 const int EEPROM_SSID_STOP = 64;
 const int EEPROM_WIFIPASS_START = 65;
@@ -34,6 +34,8 @@ const int EEPROM_USERPASS_STOP = 256;
 const int EEPROM_DEVICENAME_START = 257;
 const int EEPROM_DEVICENAME_STOP = 320;
 const int EEPROM_MODE = 321; //  0 for setup mode or 1 for connect mode
+const int EEPROM_RELAYSTATUS = 323;
+
 const int RELAY_PIN = 2;
 const int writeableEEPROMArea = 512;
 
@@ -128,11 +130,17 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         restart = 1;
 
       }else if(strcmp(type, "relayUpdate") == 0){
-          relayStatus = root["relay"];
+        relayStatus = root["relay"];
+        Log.notice("Writing Relay Status to EEPROM: %d", relayStatus);
+    
+        EEPROM.write(EEPROM_RELAYSTATUS, relayStatus);
+        EEPROM.commit();
+        root.printTo(Serial);
                
       }else{      
         
       }
+      Log.notice("\n");
       
     }
     break;      
@@ -141,9 +149,9 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 // example JSON objects
 // {"type":"readytosend"}
-//{"type":"powerUpdate","timeStamp":"152788383","totalPower":"42"}
+// {"type":"powerUpdate","timeStamp":"152788383","totalPower":"42"}
+// {"type":"relayUpdate"}
 // {"type":"restart","mode":"0"}
-// {"deviceid":"5ri09trsm5sil31ai5pa68ldh1","type":"currentTime"}
 // {"deviceid":"5ri09trsm5sil31ai5pa68ldh1","type":"currentTime"}
 
 // used to receive data from the cu
@@ -170,8 +178,7 @@ void readCU(){
         root1.printTo(message);
     
         message.toCharArray(outbuffer, 200);
-        Log.notice("Sending: ");
-        Log.notice("%s\n",outbuffer); 
+        Log.notice("Sending: %s\n",outbuffer); 
         webSocket.sendTXT(outbuffer);
       }else if(strcmp(type, "currentTime") == 0){
         StaticJsonBuffer<200> jsonBuffer;  
@@ -198,13 +205,42 @@ void readCU(){
       }else if(strcmp(type, "relayUpdate") == 0){
         // send the most recent relay status to the cu
 //        sendRelayUpdateToCU(relayStatus);
-       
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "relayUpdate";
+        
+        String message;
+        root1.printTo(message);
+        message.toCharArray(outbuffer, 100);
+        Log.notice("Sending: ");
+        Log.notice("%s\n",outbuffer); 
+        webSocket.sendTXT(outbuffer);
+        
+      }else if(strcmp(type, "tempUpdate") == 0){
+        // send the most recent relay status to the cu
+//        sendRelayUpdateToCU(relayStatus);
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "tempUpdate";
+        root1["timeStamp"] = root["timeStamp"];
+        root1["temp"] = root["temp"];
+        
+        String message;
+        root1.printTo(message);
+        message.toCharArray(outbuffer, 100);
+        Log.notice("Sending: ");
+        Log.notice("%s\n",outbuffer); 
+        webSocket.sendTXT(outbuffer);
+        
       }else if(strcmp(type, "readytosend") == 0){//{"type":"readytosend"}
         // cu wants to know if the esp is connected to main server {"type":”readytosend”,”readytosend”:”1”}
         StaticJsonBuffer<200> jsonBuffer;  
         JsonObject& root = jsonBuffer.createObject();        
         root["type"] = "readytosend";
         root["readytosend"] = "1";
+        root["mode"] = opmode;
         
 //        if(connectedToInternet){
 //          // connected to ms
@@ -383,10 +419,11 @@ boolean restoreConfig() {
 }
 
 void clearConfig(){
-  for (int i = 0; i < 256; ++i) {
+  for (int i = 0; i < writeableEEPROMArea; ++i) {
     EEPROM.write(i, 0);
     delay(25);
   }
+  EEPROM.commit();
 }
 
 boolean checkConnection() {
@@ -400,7 +437,7 @@ boolean checkConnection() {
       return (true);
     }
     delay(500);
-    Log.notice(".");
+//    Log.notice(".");
     count++;
   }
   connectedToInternet = false;
@@ -410,31 +447,90 @@ boolean checkConnection() {
 
 
 
-void connectModeTest() {
-  Log.notice("Starting Web Server at ");
-//    Serial.println(WiFi.localIP());
-    webServer.on("/", []() {
-      String s = "<h1>STA mode</h1><p><a href=\"/reset\">Reset Wi-Fi Settings</a></p>";
-      webServer.send(200, "text/html", makePage("STA mode", s));
-    });
-    webServer.on("/reset", []() {
-      for (int i = 0; i < writeableEEPROMArea; ++i) {
-        EEPROM.write(i, 0);
+//void connectModeTest() {
+//  Log.notice("Starting Web Server at ");
+////    Serial.println(WiFi.localIP());
+//    webServer.on("/", []() {
+//      String s = "<h1>STA mode</h1><p><a href=\"/reset\">Reset Wi-Fi Settings</a></p>";
+//      webServer.send(200, "text/html", makePage("STA mode", s));
+//    });
+//    webServer.on("/reset", []() {
+//      for (int i = 0; i < writeableEEPROMArea; ++i) {
+//        EEPROM.write(i, 0);
+//      }
+//      
+//      String s = "<h1>Wi-Fi settings was reset.</h1><p>Please reset device.</p>";
+//      webServer.send(200, "text/html", makePage("Reset Wi-Fi Settings", s));
+//      
+//      while(1){
+//        delay(1000);
+//        ESP.restart();
+//      }
+//      
+//    });
+//    webServer.begin();
+//}
+
+void connectModeSetup(){
+  // a config already exists, check the wifi connection
+    settingMode = false;
+        
+    connectedToWifi = checkConnection();
+
+    WiFi.mode(WIFI_STA);
+    WiFiMulti.addAP(ssid.c_str(), pass.c_str());
+
+    Log.notice("Reading EEPROM...\n");
+    ssid = "";
+    pass = "";
+    accountusername = "";
+    accountpass = "";
+    devicename = "";
+
+    if(opmode == 1) {  
+      for (int i = 0; i < 32; ++i) {
+        ssid += char(EEPROM.read(i));
       }
-      
-      String s = "<h1>Wi-Fi settings was reset.</h1><p>Please reset device.</p>";
-      webServer.send(200, "text/html", makePage("Reset Wi-Fi Settings", s));
-      
-      while(1){
-        delay(1000);
-        ESP.restart();
+      Log.notice("SSID: %s\n",ssid.c_str());
+      for (int i = 32; i < writeableEEPROMArea; ++i) {
+        pass += char(EEPROM.read(i));
       }
+      Log.notice("Password: %s\n",pass.c_str());
       
-    });
-    webServer.begin();
+      for (int i = 0; i < 32; ++i) {
+        accountusername += char(EEPROM.read(EEPROM_USERNAME_START+i));
+      }
+      Log.notice("Account Username: %s\n",accountusername.c_str());
+      
+      for (int i = 0; i < 32; ++i) {
+        accountpass += char(EEPROM.read(EEPROM_USERPASS_START+i));
+      }
+      Log.notice("Account Password: %s\n",accountpass.c_str());
+
+    }
+
+    WiFiMulti.addAP(ssid.c_str(), pass.c_str());
+           
+    pinMode(RELAY_PIN, OUTPUT);
+    
+    connectedToWifi = (WiFiMulti.run() == WL_CONNECTED);
+    
+    // establish a websocket connection with the main server
+    if(connectedToWifi) {
+      webSocket.beginSSL(mainserver, 443, "/wssdev", "");
+      webSocket.onEvent(webSocketEvent);
+      webSocket.setReconnectInterval(5000);
+    }else{
+      webSocket.beginSSL(mainserver, 443, "/wssdev", "");
+      webSocket.onEvent(webSocketEvent);
+      webSocket.setReconnectInterval(5000);
+    }
+    
 }
 
-void setupMode() {
+
+
+void setupModeSetup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
@@ -455,8 +551,9 @@ void setupMode() {
   dnsServer.start(53, "*", apIP);
 //  connectModeTest();
 
-  Log.notice("Starting Web Server at ");
+  Log.notice("Starting Web Server\n");
 //  Serial.println(WiFi.softAPIP());
+  WiFi.softAPIP();
   webServer.on("/settings", []() {
     String s = "<h1>Wi-Fi Settings</h1><p>Please enter your password by selecting the SSID.</p>";
     s += "<form method=\"get\" action=\"setap\"><label>SSID: </label><select name=\"ssid\">";
@@ -472,18 +569,18 @@ void setupMode() {
       EEPROM.write(i, 0);
     }
     String ssid = urlDecode(webServer.arg("ssid"));
-    Log.notice("SSID: ");
-    Log.notice("%s\n",ssid.c_str());
+    Log.notice("SSID: %s\n",ssid.c_str());
+//    Log.notice("%s\n",ssid.c_str());
     String pass = urlDecode(webServer.arg("pass"));
-    Log.notice("Password: ");
-    Log.notice("%s\n",pass.c_str());
+    Log.notice("Password: %s\n",pass.c_str());
+//    Log.notice("%s\n",pass.c_str());
     String accountusername = urlDecode(webServer.arg("username"));
-    Log.notice("Account Password: ");
-    Log.notice("%s\n",accountusername.c_str());
+    Log.notice("Account Username: %s\n",accountusername.c_str());
+//    Log.notice("%s\n",accountusername.c_str());
     String accountpass = urlDecode(webServer.arg("userpass"));
-    Log.notice("Account Password: ");
-    Log.notice("%s\n",accountpass.c_str());
-    Log.notice("Writing SSID to EEPROM...");
+    Log.notice("Account Password: %s\n",accountpass.c_str());
+//    Log.notice("%s\n",accountpass.c_str());
+    Log.notice("Writing SSID to EEPROM...\n");
     for (int i = 0; i < ssid.length(); ++i) {
       EEPROM.write(i, ssid[i]);
     }
@@ -601,7 +698,6 @@ void setup() {
   //    
   connected = 0;
   restart = 0;
-  relayStatus = 0;
   opmode = 0;
   
   //
@@ -620,83 +716,30 @@ void setup() {
 
   connectedToWifi = 0;
   EEPROM.begin(writeableEEPROMArea);
-  
+
 //  clearConfig();
   
-  delay(10);
+  delay(25);
+
+
   opmode = EEPROM.read(EEPROM_MODE);
 
   if (opmode == 1 && restoreConfig()) {
-    // a config already exists, check the wifi connection
-    settingMode = false;
-        
-    connectedToWifi = checkConnection();
-
-    WiFi.mode(WIFI_STA);
-    WiFiMulti.addAP(ssid.c_str(), pass.c_str());
-
-    Log.notice("Reading EEPROM...");
-    ssid = "";
-    pass = "";
-    accountusername = "";
-    accountpass = "";
-    devicename = "";
-
-    if(opmode == 1) {  
-      for (int i = 0; i < 32; ++i) {
-        ssid += char(EEPROM.read(i));
-      }
-      Log.notice("SSID: ");
-      Log.notice("%s\n",ssid.c_str());
-      for (int i = 32; i < writeableEEPROMArea; ++i) {
-        pass += char(EEPROM.read(i));
-      }
-      Log.notice("Password: ");
-      Log.notice("%s\n",pass.c_str());
-      
-      for (int i = 0; i < 32; ++i) {
-        accountusername += char(EEPROM.read(EEPROM_USERNAME_START+i));
-      }
-      Log.notice("Account Username: ");
-      Log.notice("%s\n",accountusername.c_str());
-      
-      for (int i = 0; i < 32; ++i) {
-        accountpass += char(EEPROM.read(EEPROM_USERPASS_START+i));
-      }
-      Log.notice("Account Password: ");
-      Log.notice("%s\n",accountpass.c_str());
-
-    }
-
-    WiFiMulti.addAP(ssid.c_str(), pass.c_str());
-           
-    pinMode(RELAY_PIN, OUTPUT);
-    
-    connectedToWifi = (WiFiMulti.run() == WL_CONNECTED);
-    
-    // establish a websocket connection with the main server
-    if(connectedToWifi) {
-      webSocket.beginSSL(mainserver, 443, "/wssdev", "");
-      webSocket.onEvent(webSocketEvent);
-      webSocket.setReconnectInterval(5000);
-    }else{
-      webSocket.beginSSL(mainserver, 443, "/wssdev", "");
-      webSocket.onEvent(webSocketEvent);
-      webSocket.setReconnectInterval(5000);
-    }
-    
+    relayStatus = EEPROM.read(EEPROM_RELAYSTATUS);
+    connectModeSetup(); 
   }else{
-    setupMode();
+    
+    setupModeSetup();
   }
     
 }
 
 void loop() {
-    WiFiMulti.run();
-    
+
+//    opmode = 0;
     // check for serial data from the cu
     readCU();
-    
+      
     // check if the ESP needs to restart
     if(restart){
       ESP.restart();
@@ -708,7 +751,7 @@ void loop() {
       dnsServer.processNextRequest();
       webServer.handleClient();
     }else{
-  
+      WiFiMulti.run();
       webSocket.loop();
  
     }
