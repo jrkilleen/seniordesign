@@ -240,7 +240,7 @@ void readCU(){
         JsonObject& root = jsonBuffer.createObject();        
         root["type"] = "readytosend";
         root["readytosend"] = "1";
-        root["readytosend"] = opmode;
+        root["mode"] = opmode;
         
 //        if(connectedToInternet){
 //          // connected to ms
