@@ -140,7 +140,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       }else{      
         
       }
-      Log.notice("\n");
       
     }
     break;      
@@ -152,7 +151,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 // {"type":"powerUpdate","timeStamp":"152788383","totalPower":"42"}
 // {"type":"relayUpdate"}
 // {"type":"restart","mode":"0"}
-// {"deviceid":"5ri09trsm5sil31ai5pa68ldh1","type":"currentTime"}
+// {"type":"currentTime"}
 
 // used to receive data from the cu
 void readCU(){
@@ -189,8 +188,7 @@ void readCU(){
         String message;
         root1.printTo(message);
         message.toCharArray(outbuffer, 100);
-        Log.notice("Sending: ");
-        Log.notice("%s\n",outbuffer); 
+        Log.notice("Sending: %s\n",outbuffer);
         webSocket.sendTXT(outbuffer);
       }else if(strcmp(type, "restart") == 0){
         // cu is telling the ESP to restart
@@ -213,8 +211,7 @@ void readCU(){
         String message;
         root1.printTo(message);
         message.toCharArray(outbuffer, 100);
-        Log.notice("Sending: ");
-        Log.notice("%s\n",outbuffer); 
+        Log.notice("Sending: %s\n",outbuffer);
         webSocket.sendTXT(outbuffer);
         
       }else if(strcmp(type, "tempUpdate") == 0){
@@ -230,8 +227,7 @@ void readCU(){
         String message;
         root1.printTo(message);
         message.toCharArray(outbuffer, 100);
-        Log.notice("Sending: ");
-        Log.notice("%s\n",outbuffer); 
+        Log.notice("Sending: %s\n",outbuffer);
         webSocket.sendTXT(outbuffer);
         
       }else if(strcmp(type, "readytosend") == 0){//{"type":"readytosend"}
@@ -299,8 +295,7 @@ void reqTimeFromMS(){
   String message;
   root.printTo(message);
   message.toCharArray(outbuffer, 400);
-  Log.notice("Sending: ");
-  Log.notice("%s\n", outbuffer); 
+  Log.notice("Sending: %s\n", outbuffer);
   webSocket.sendTXT(outbuffer);
 }
 
@@ -312,12 +307,12 @@ void registerDeviceWithMS(){
   root["type"] = "registerDevice";
   root["accountusername"] = accountusername.c_str();
   root["accountpass"] = accountpass.c_str();
-
+  root["devicename"] = devicename.c_str();
+  
   String message;
   root.printTo(message);
   message.toCharArray(outbuffer, 400);
-  Log.notice("Sending: ");
-  Log.notice("%s\n",outbuffer); 
+  Log.notice("Sending: %s\n", outbuffer);
   webSocket.sendTXT(outbuffer);
 }
 
@@ -331,8 +326,7 @@ void reqRelayStatusFromMS(){
   String message;
   root.printTo(message);
   message.toCharArray(outbuffer, 100);
-  Log.notice("Sending: ");
-  Log.notice("%s\n",outbuffer); 
+  Log.notice("Sending: %s\n", outbuffer);
   webSocket.sendTXT(outbuffer);
 }
 
@@ -507,6 +501,11 @@ void connectModeSetup(){
       }
       Log.notice("Account Password: %s\n",accountpass.c_str());
 
+      for (int i = 0; i < 32; ++i) {
+        devicename += char(EEPROM.read(EEPROM_DEVICENAME_START +i));
+      }
+      Log.notice("Device Name: %s\n",devicename.c_str());
+
     }
 
     WiFiMulti.addAP(ssid.c_str(), pass.c_str());
@@ -560,8 +559,10 @@ void setupModeSetup() {
     s += ssidList;
 //    s += "</select><br>Wifi-Password: <input name=\"pass\" length=64 type=\"password\"><input type=\"submit\"></form>";
     s += "</select><br>Wifi-Password: <input name=\"pass\" length=64 type=\"password\">";
+    s += "</select><br>Device Name: <input name=\"devicename\" length=64>";
     s += "</select><br>Account Username: <input name=\"username\" length=64>";
     s += "</select><br>Account Password: <input name=\"userpass\" length=64 type=\"password\"><input type=\"submit\"></form>";
+ 
     webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
   });
   webServer.on("/setap", []() {
@@ -580,6 +581,10 @@ void setupModeSetup() {
     String accountpass = urlDecode(webServer.arg("userpass"));
     Log.notice("Account Password: %s\n",accountpass.c_str());
 //    Log.notice("%s\n",accountpass.c_str());
+
+    String devicename = urlDecode(webServer.arg("devicename"));
+    Log.notice("Device Name: %s\n",devicename.c_str());
+    
     Log.notice("Writing SSID to EEPROM...\n");
     for (int i = 0; i < ssid.length(); ++i) {
       EEPROM.write(i, ssid[i]);
@@ -599,7 +604,10 @@ void setupModeSetup() {
     for (int i = 0; i < accountpass.length(); i++) {
       EEPROM.write(i+EEPROM_USERPASS_START, accountpass[i]);
     }
-
+    Log.notice("Writing Device Name to EEPROM...");
+    for (int i = 0; i < devicename.length(); i++) {
+      EEPROM.write(i+EEPROM_DEVICENAME_START , devicename[i]);
+    }
 
     
     EEPROM.commit();
@@ -716,6 +724,7 @@ void setup() {
 
   connectedToWifi = 0;
   EEPROM.begin(writeableEEPROMArea);
+  
 
 //  clearConfig();
   
