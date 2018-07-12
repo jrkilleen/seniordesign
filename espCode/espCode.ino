@@ -35,6 +35,8 @@ const int EEPROM_DEVICENAME_START = 257;
 const int EEPROM_DEVICENAME_STOP = 320;
 const int EEPROM_MODE = 321; //  0 for setup mode or 1 for connect mode
 const int EEPROM_RELAYSTATUS = 323;
+const int EEPROM_CONFIG_SET = 324;
+
 
 const int RELAY_PIN = 2;
 const int writeableEEPROMArea = 512;
@@ -54,7 +56,7 @@ String accountusername;
 String accountpass;
 String devicename;
 String toMSBuffer;
-String deviceid = "5ri09trsm5sil31ai5pa68ldh3";
+String deviceid = "5ri09trsm5sil31ai5pa68ldh1";
 
 const char* apSSID = "ESP8266_SETUP";
 char *buffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
@@ -148,6 +150,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 // example JSON objects
 // {"type":"readytosend"}
+// {"type":"deviceid"}
 // {"type":"powerUpdate","timeStamp":"152788383","totalPower":"42"}
 // {"type":"relayUpdate"}
 // {"type":"restart","mode":"0"}
@@ -179,6 +182,7 @@ void readCU(){
         message.toCharArray(outbuffer, 200);
         Log.notice("Sending: %s\n",outbuffer); 
         webSocket.sendTXT(outbuffer);
+        
       }else if(strcmp(type, "currentTime") == 0){
         StaticJsonBuffer<200> jsonBuffer;  
         JsonObject& root1 = jsonBuffer.createObject();
@@ -190,6 +194,15 @@ void readCU(){
         message.toCharArray(outbuffer, 100);
         Log.notice("Sending: %s\n",outbuffer);
         webSocket.sendTXT(outbuffer);
+      }else if(strcmp(type, "deviceid") == 0){
+        StaticJsonBuffer<200> jsonBuffer;  
+        JsonObject& root1 = jsonBuffer.createObject();
+        root1["deviceid"] = deviceid;
+        root1["type"] = "deviceid";
+        
+        // cu is telling the ESP to restart
+        root1.printTo(Serial);
+        
       }else if(strcmp(type, "restart") == 0){
         // cu is telling the ESP to restart
         restart = 1;
@@ -535,7 +548,6 @@ void setupModeSetup() {
   delay(100);
   int n = WiFi.scanNetworks();
   delay(100);
-  Log.notice("");
   for (int i = 0; i < n; ++i) {
     ssidList += "<option value=\"";
     ssidList += WiFi.SSID(i);
@@ -609,6 +621,7 @@ void setupModeSetup() {
       EEPROM.write(i+EEPROM_DEVICENAME_START , devicename[i]);
     }
 
+    EEPROM.write(EEPROM_CONFIG_SET, 1);
     
     EEPROM.commit();
     Log.notice("Write EEPROM done!");
@@ -631,9 +644,8 @@ void setupModeSetup() {
   });
   webServer.begin();
 
-  Log.notice("Starting Access Point at \"");
-  Log.notice("%s\n",apSSID);
-  Log.notice("\"");
+  Log.notice("Starting Access Point at %s",apSSID);
+
 }
 
 String makePage(String title, String contents) {
@@ -724,9 +736,15 @@ void setup() {
 
   connectedToWifi = 0;
   EEPROM.begin(writeableEEPROMArea);
-  
 
-//  clearConfig();
+  int configIsSet = EEPROM.read(EEPROM_CONFIG_SET);
+
+  if(configIsSet == 1){
+    
+  }else{
+    clearConfig();
+  }
+  
   
   delay(25);
 
