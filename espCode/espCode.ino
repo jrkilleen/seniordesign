@@ -488,31 +488,6 @@ boolean checkConnection() {
 }
 
 
-
-//void connectModeTest() {
-//  Log.notice("Starting Web Server at ");
-////    Serial.println(WiFi.localIP());
-//    webServer.on("/", []() {
-//      String s = "<h1>STA mode</h1><p><a href=\"/reset\">Reset Wi-Fi Settings</a></p>";
-//      webServer.send(200, "text/html", makePage("STA mode", s));
-//    });
-//    webServer.on("/reset", []() {
-//      for (int i = 0; i < writeableEEPROMArea; ++i) {
-//        EEPROM.write(i, 0);
-//      }
-//      
-//      String s = "<h1>Wi-Fi settings was reset.</h1><p>Please reset device.</p>";
-//      webServer.send(200, "text/html", makePage("Reset Wi-Fi Settings", s));
-//      
-//      while(1){
-//        delay(1000);
-//        ESP.restart();
-//      }
-//      
-//    });
-//    webServer.begin();
-//}
-
 void connectModeSetup(){
   // a config already exists, check the wifi connection
     settingMode = false;
@@ -601,15 +576,31 @@ void setupModeSetup() {
 //  Serial.println(WiFi.softAPIP());
   WiFi.softAPIP();
   webServer.on("/settings", []() {
-    String s = "<h1>Wi-Fi Settings</h1><p>Please enter your password by selecting the SSID.</p>";
-    s += "<form method=\"get\" action=\"setap\"><label>SSID: </label><select name=\"ssid\">";
+//    String s = "<h1>Wi-Fi Settings</h1><p>Please enter your password by selecting the SSID.</p>";
+//    s += "<form method=\"get\" action=\"setap\"><label>SSID: </label><select name=\"ssid\">";
+//    s += ssidList;
+//    s += "</select><br>Wifi-Password: <input name=\"pass\" length=64 type=\"password\">";
+//    s += "</select><br>Device Name: <input name=\"devicename\" length=64>";
+//    s += "</select><br>Account Username: <input name=\"username\" length=64>";
+//    s += "</select><br>Account Password: <input name=\"userpass\" length=64 type=\"password\"><input type=\"submit\"></form>";
+
+
+    String s = "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"uft-8\" /> <title>Watt You Pay For</title> ";
+    s += "<style> body{ font-family: Helvetica; max-width: 600px; margin: auto; background-color: #2d2d2d; } h1, h2 { text-align: center; } ";
+    s += "h2 { border-bottom: 2px solid #2d2d2d; padding-bottom: 20px; } label { display: block; text-align: left; } form { max-width: 400px; margin: auto; align-items: center; padding: 20px; } ";
+    s += "div { background-color: #f1f1f1; border-radius: 10px; padding: 20px; margin-top: 30px; } #submit { margin-top: 20px; padding: 10px; } input { width: 200px; margin-bottom: 20px; } ";
+    s += "select { margin-bottom: 20px; } </style> </head> <body> <div class=\"\"> <h1>Watt You Pay For</h1> <h2>Wi-Fi Set Up</h2> ";
+    s += "<form class=\"form\" method=\"get\" action=\"setap\"> ";
+    s += "<label for=\"ssid\">SSID: <select class=\"ssid\" name=\"ssid\"> ";
     s += ssidList;
-//    s += "</select><br>Wifi-Password: <input name=\"pass\" length=64 type=\"password\"><input type=\"submit\"></form>";
-    s += "</select><br>Wifi-Password: <input name=\"pass\" length=64 type=\"password\">";
-    s += "</select><br>Device Name: <input name=\"devicename\" length=64>";
-    s += "</select><br>Account Username: <input name=\"username\" length=64>";
-    s += "</select><br>Account Password: <input name=\"userpass\" length=64 type=\"password\"><input type=\"submit\"></form>";
- 
+    s += "</select></label> <label for=\"pass\">Wi-Fi-Password:</label> <input type=\"password\" name=\"pass\" length=64> ";
+    s += "<label for=\"devicename\">Device Name:</label> <input type=\"text\" name=\"devicename\" length=64> ";
+    s += "<label for=\"username\">Account Username:</label> <input type=\"text\" name=\"username\" length=64> ";
+    s += "<label for=\"userpass\">Account Password:</label> <input type=\"password\" name=\"userpass\" length=64> ";
+    s += "<input type=\"submit\" name=\"submit\" value=\"Submit\" id=\"submit\"/> </form> </div> </body> </html>";
+  
+    
+    
     webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
   });
   webServer.on("/setap", []() {
