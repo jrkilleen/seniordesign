@@ -36,6 +36,7 @@ const int EEPROM_DEVICENAME_STOP = 320;
 const int EEPROM_MODE = 321; //  0 for setup mode or 1 for connect mode
 const int EEPROM_RELAYSTATUS = 323;
 const int EEPROM_CONFIG_SET = 324;
+const int EEPROM_LOGLEVEL = 325;
 
 
 const int RELAY_PIN = 2;
@@ -56,7 +57,7 @@ String accountusername;
 String accountpass;
 String devicename;
 String toMSBuffer;
-String deviceid = "5ri09trsm5sil31ai5pa68ldh1";
+String deviceid = "5ri09trsm5sil31ai5pa68ldh3";
 
 const char* apSSID = "ESP8266_SETUP";
 char *buffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
@@ -83,6 +84,7 @@ bool connectedToMS;
 bool settingMode;
 
 void updateConnectionStatus();
+void registerDeviceWithMS();
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   
@@ -155,6 +157,17 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 // {"type":"relayUpdate"}
 // {"type":"restart","mode":"0"}
 // {"type":"currentTime"}
+// {"type":"loglevel", "loglevel":"0"}
+// {"type":"tempUpdate", "temp":"42"}
+
+//* 0 - LOG_LEVEL_SILENT     no output 
+//* 1 - LOG_LEVEL_FATAL      fatal errors 
+//* 2 - LOG_LEVEL_ERROR      all errors  
+//* 3 - LOG_LEVEL_WARNING    errors, and warnings 
+//* 4 - LOG_LEVEL_NOTICE     errors, warnings and notices 
+//* 5 - LOG_LEVEL_TRACE      errors, warnings, notices & traces 
+//* 6 - LOG_LEVEL_VERBOSE    all
+
 
 // used to receive data from the cu
 void readCU(){
@@ -234,7 +247,7 @@ void readCU(){
         JsonObject& root1 = jsonBuffer.createObject();
         root1["deviceid"] = deviceid;
         root1["type"] = "tempUpdate";
-        root1["timeStamp"] = root["timeStamp"];
+//        root1["timeStamp"] = root["timeStamp"];
         root1["temp"] = root["temp"];
         
         String message;
@@ -262,9 +275,31 @@ void readCU(){
         root.printTo(Serial);
         Log.notice("\n");
        
-      }else{  
-        
-      }      
+      }else if(strcmp(type, "loglevel") == 0){
+        // cu wants to know if the esp is connected to main server {"type":”readytosend”,”readytosend”:”1”}
+        //EEPROM_LOGLEVEL
+        int loglevel = root["loglevel"];
+        //* 0 - LOG_LEVEL_SILENT     no output 
+        //* 1 - LOG_LEVEL_FATAL      fatal errors 
+        //* 2 - LOG_LEVEL_ERROR      all errors  
+        //* 3 - LOG_LEVEL_WARNING    errors, and warnings 
+        //* 4 - LOG_LEVEL_NOTICE     errors, warnings and notices 
+        //* 5 - LOG_LEVEL_TRACE      errors, warnings, notices & traces 
+        //* 6 - LOG_LEVEL_VERBOSE    all
+        EEPROM.write(EEPROM_LOGLEVEL, loglevel);
+        EEPROM.commit();
+        delay(25);
+        restart = 1;
+        Log.notice("loglevel changed to: %d\n",loglevel);
+
+      }else if(strcmp(type, "clearconfig") == 0){ 
+        Log.notice("clearing config");
+  
+        clearConfig();
+
+      }else{
+              
+      }
     }
            
   }else{
@@ -732,11 +767,15 @@ void setup() {
 //* 4 - LOG_LEVEL_NOTICE     errors, warnings and notices 
 //* 5 - LOG_LEVEL_TRACE      errors, warnings, notices & traces 
 //* 6 - LOG_LEVEL_VERBOSE    all 
-  Log.begin(LOG_LEVEL_SILENT , &Serial);
+
+
+
 
   connectedToWifi = 0;
   EEPROM.begin(writeableEEPROMArea);
+  int loglevel = EEPROM.read(EEPROM_LOGLEVEL);
 
+  Log.begin(loglevel , &Serial);
   int configIsSet = EEPROM.read(EEPROM_CONFIG_SET);
 
   if(configIsSet == 1){
