@@ -759,8 +759,9 @@ void setup() {
 //* 5 - LOG_LEVEL_TRACE      errors, warnings, notices & traces 
 //* 6 - LOG_LEVEL_VERBOSE    all 
 
-
-
+  // for esp01S can be 0 for gpio 0 or 2 for gpio 2
+  pinMode(2, OUTPUT); 
+  digitalWrite(2, HIGH);
 
   connectedToWifi = 0;
   EEPROM.begin(writeableEEPROMArea);
@@ -804,7 +805,7 @@ void loop() {
     }
 
     if (opmode == 0) {
-      // setup mode
+      // setup mode   
       dnsServer.processNextRequest();
       webServer.handleClient();
     }else{
