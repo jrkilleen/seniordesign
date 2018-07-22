@@ -1,0 +1,453 @@
+//UCF Summer 2018 Group 10 Senior Design Code
+//Code for thermostat to be modified for Outlet and Switch
+#include <LiquidCrystal.h> // (THERMOSTAT ONLY)
+#include <OneWire.h> //(THERMOSTAT ONLY)
+#include <DallasTemperature.h> //(THERMOSTAT ONLY)
+#include <ArduinoJson.h>;
+//Define Pins
+#define espResetPin 25
+#define ONE_WIRE_BUS 33 //PUT THERMOSTAT DATA PIN HERE
+LiquidCrystal lcd(22,24,29,30,31,32); //DEFINE LCD PINS HERE IN ORDER OF (RS, E, DB4,DB5,DB6,DB7) (THERMOSTAT ONLY)
+
+//Declare Variables
+float currentTemp; //Temp value read from the thermometer (THERMOSTAT ONLY)
+int setTemp; //Temperature set by the user (THERMOSTAT ONLY)
+int relayFlag;
+long lastTempCheck; //c the last time the temp was checked
+long lastUpCheck;
+long lastDownCheck;
+long lastModePress;
+long lastEntry; //holds the last time the RTC was checked
+long lastMinute; //last time power data was sent;
+long lastRelay; // last time relay status was chcked
+
+float minutePower; // holds the total power for the current minute
+long timeStamp; //the minute the power data is sent for
+long waitTime; //remainer in s of time recieved from server, so that all power is forn a single minute on the minute
+long delayTime; //wait time converted to millis for delay() purposes
+int espMode;
+int isOn;
+boolean toggle;
+int globalRelay;
+
+
+//Setup a oneWire instance to communicate with any OneWire Devices
+OneWire oneWire(ONE_WIRE_BUS);
+
+//Json Object variables
+char *buffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+char *serialbuffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+char *outbuffer = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+//Pass our oneWIre reference to Dallas Temperature
+DallasTemperature sensors(&oneWire);
+
+
+void setup() {
+  pinMode(espResetPin, OUTPUT); //ESP RESET
+  delay(5000);
+  init_ESP();
+  delay(5000);
+  Serial.begin(9600);
+  toggle = false;
+  pinMode(2, INPUT); //temp up button
+  pinMode(3, INPUT); //temp down button
+  pinMode(18, INPUT); //modeSwitchButton;
+  pinMode(13, OUTPUT); //debug led
+  pinMode(45, OUTPUT); //LED
+  pinMode(46, OUTPUT);//OTHER LED
+  pinMode(34, OUTPUT); //relay
+  digitalWrite(34, LOW);
+  relayFlag = 0;
+  globalRelay = 1;
+  attachInterrupt(0, temp_Up, RISING); //button interrupts occur on rising edge
+  attachInterrupt(1, temp_Down, RISING);
+  attachInterrupt(5, switch_Mode,RISING);
+  sensors.begin(); //Start up the thermometer library (thermo only???)
+  //cofigure the LCD (THERMOSTAT ONLY)\
+  //First line for displaying the temp being read
+  lcd.begin(16,2);
+  lcd.print("CurrentTemp:");
+  setTemp=75; //On boot system defaults to 75 deg
+  update_Current_Temp();
+  //delay(20000);
+  //Serial.println("Post Delay");
+  Serial.flush();
+
+  ready_To_Send();
+  get_Time();
+  delayTime = waitTime * 1000;
+  delay(delayTime);
+   Serial.flush();
+  //Initalize time dependent variables
+  lastUpCheck = millis();
+  lastDownCheck = millis();
+  lastModePress = millis();
+  lastTempCheck = millis();
+  lastRelay = millis();
+  lastEntry = millis();
+  lastMinute = millis();
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  if(millis()- lastEntry > 1000)
+  {
+    if(globalRelay == 1)
+      {
+        digitalWrite(34, LOW);
+      }
+      else if(globalRelay == 0)
+      {
+        digitalWrite(35, HIGH);
+      }
+    if (millis() - lastMinute > 60000)
+    {
+    timeStamp = timeStamp + 60;
+    send_Data();
+    lastMinute = millis();
+    }
+    else
+    {
+      do_Reads();
+    }
+  }
+
+   if(millis() - lastRelay > 7000)
+  {
+    handle_Relay();
+  }
+
+ if (millis() - lastTempCheck > 30000) //
+ {
+  send_Temp();
+  update_Current_Temp();
+ }
+}
+
+
+//FUNCTIONS BELOW
+void update_Current_Temp() //Function to read temp from onewire thermometer and display it on LCD in the proper location
+{
+  lcd.setCursor(12,0);
+  sensors.requestTemperatures();//Send command to get temperature reading
+  currentTemp = sensors.getTempFByIndex(0);
+  lcd.print(sensors.getTempFByIndex(0));//Get the temp in Farenheit from the sensor and print it
+  lcd.setCursor(0,1);
+  lcd.print("SetTemp:");
+  lcd.setCursor(8,1);
+  lcd.print(setTemp);
+  lcd.print("      ");
+  if ((currentTemp - setTemp) > 1) //2 or more deg hotter than user wants
+  {
+    isOn=1;
+     digitalWrite(45, HIGH);   // turn the LED on (HIGH is the voltage level)
+     digitalWrite(46, LOW);
+
+  }
+  else if (currentTemp - setTemp < -1)
+  {
+    isOn=1;
+    digitalWrite(45, LOW);   // turn the LED on (HIGH is the voltage level)
+    digitalWrite(46, HIGH);
+
+  }
+  else
+  {
+    isOn = 0;
+    digitalWrite(45, LOW);
+    digitalWrite(46, LOW);
+  }
+
+  lastTempCheck = millis();
+}
+
+void do_Reads(){
+  int readsDone = 0; //tracks number of reads done in while loop
+  float voltageValue; //Voltage value Read from ADC
+  float currentLowValue; //Value for low current (HIGHER GAIN) from adc
+  float currentHighValue; //Value for high current (LOWER GAIN) from adc
+  float useCurrent; //holds adc current value thata will be used in real current
+  float multVolt; //scaled voltage from adc val to 0-5v val
+  float modVolt; //real voltage val
+  float totalPower; //total power for sample period
+  float avgPower; //avg power for sample period
+  float secondPower;
+  long sampleTracker;
+  float multCurrent;
+  float modCurrent;
+
+  readsDone = 0;
+  totalPower = 0;
+  sampleTracker = millis();
+  while(millis() - sampleTracker < 16)
+  {
+  voltageValue = analogRead(8);
+  currentLowValue = analogRead(9);
+  currentHighValue = analogRead(10);
+  if(currentLowValue >983)
+  {
+    useCurrent = currentHighValue;
+    multCurrent = (useCurrent * 5)/1024;
+    modCurrent = ((multCurrent - 2.5) * 400)/47;
+
+  }
+  else
+  {
+    useCurrent = currentLowValue;
+    multCurrent = (useCurrent * 5)/1024;
+    modCurrent = ((multCurrent - 2.5)*2)/3.525;
+
+  }
+  multVolt = voltageValue - 512;
+  modVolt = multVolt * .4176904296875;
+  totalPower = totalPower + (modVolt * modCurrent);
+  readsDone = readsDone+1;
+  }
+  avgPower = totalPower / readsDone;
+  int intVer = (int)avgPower;
+  minutePower = minutePower + avgPower;
+  lastEntry = millis();
+}
+
+void temp_Up(){ //runs when temp up button is pressed
+  if(millis()- lastUpCheck > 250){
+  if(setTemp <86)
+  {
+    setTemp = setTemp +1; //if set temp is below max increase by 1
+  }
+  update_Current_Temp(); //update temp will toggle accesories as needed
+  lastUpCheck = millis();
+  }
+}
+
+
+void temp_Down(){ //runs when temp down button is pressed
+  if (millis() - lastDownCheck > 250){
+  if(setTemp >64)
+  {
+    setTemp = setTemp -1;
+  }
+  update_Current_Temp();  //update temp will toggle accesories as needed
+  lastDownCheck = millis();
+  }
+}
+
+void send_Data(){
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& powerData = jsonBuffer.createObject();
+  powerData["type"] = "powerUpdate";
+  powerData["totalPower"] = minutePower;
+  powerData["timeStamp"] = timeStamp;
+
+  String message;
+
+  powerData.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+
+  minutePower = 0;
+}
+
+void get_Time(){
+  for(int l=0; l<6; l++){
+    StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "currentTime";
+  String message;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+  delay(5000);
+  }
+  int timeSet = 0;
+
+  while( timeSet != 1)
+  {
+    //Serial.println("in get time loop!");
+    if (Serial.available() > 0)
+    {
+      DynamicJsonBuffer jsonBuffer(512);
+      JsonObject& root = jsonBuffer.parseObject(Serial);
+      const char* type = root["type"];
+
+      if(root.success())
+      {
+        //digitalWrite(46, HIGH);
+        if(strcmp(type, "currentTime") == 0)
+        {
+          long rawTime = root["currentTime"];
+          waitTime = 60 - (rawTime % 60);
+          timeStamp = (rawTime + waitTime) - 60;
+          timeSet = 1;
+        }
+      }
+    }
+  }
+}
+
+void ready_To_Send(){
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "readytosend";
+  String message;
+  int isReady = 0;
+  //Serial.println("ready_To_Send Starts!");
+
+  while(isReady == 0)
+  {
+  //Serial.println("in ready to send loop!");
+  root.printTo(Serial);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+
+  for(int x = 0; x<10; x++){
+  if (Serial.available() > 0)
+    {
+      DynamicJsonBuffer jsonBuffer(512);
+      JsonObject& root = jsonBuffer.parseObject(Serial);
+      const char* type = root["type"];
+
+      if(root.success())
+      {
+        if(strcmp(type, "readytosend") == 0)
+        {
+          espMode = root["mode"];
+          isReady = 1;
+        }
+      }
+          Serial.flush();
+
+          delay(1000);
+
+    }
+        Serial.flush();
+
+    delay(1000);
+  }
+      Serial.flush();
+
+  }
+}
+
+void switch_Mode(){
+  if(millis - lastModePress > 250)
+  {
+  if (espMode == 0)
+  {
+    espMode = 1;
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "restart";
+  root["mode"] = espMode;
+  String message;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+  }
+  if (espMode == 1)
+  {
+    espMode = 0;
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "restart";
+  root["mode"] = espMode;
+  String message;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+  }
+  lastModePress = millis();
+  }
+
+}
+
+
+
+
+void handle_Relay(){
+  if (relayFlag == 0)
+  {
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "relayUpdate";
+  String message;
+  int isReady = 0;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+  relayFlag = 1;
+  }
+  else if (relayFlag == 1)
+  {
+
+      if (Serial.available())
+    {
+    DynamicJsonBuffer jsonBuffer(512);
+      JsonObject& root = jsonBuffer.parseObject(Serial);
+      const char* type = root["type"];
+
+      if(root.success())
+      {
+          toggle = !toggle;
+         digitalWrite(13, toggle);
+        //toggle = !toggle;
+        if(strcmp(type, "relayUpdate") == 0)
+        {
+           //  toggle = !toggle;
+         //digitalWrite(13, toggle);
+          digitalWrite(13, toggle);
+          const char* relay = root["relay"];
+          int relayVal = root["relay"];
+          if(strcmp(relay, "1") == 0 || relayVal == 1)
+          {
+            globalRelay =1;
+           digitalWrite(34,LOW);
+           //digitalWrite(13, HIGH);
+          }
+          if(strcmp(relay,"0") == 0 || relayVal == 0)
+          {
+            globalRelay = 0;
+           digitalWrite(34,HIGH);
+          // digitalWrite(13,LOW);
+          }
+        }
+        relayFlag = 0;
+      }
+      relayFlag=0;
+    }
+  }
+  lastRelay = millis();
+}
+
+
+
+
+void init_ESP(){
+  digitalWrite(espResetPin, HIGH);
+  delay(3000);
+  digitalWrite(espResetPin, LOW);
+  delay(3000);
+  digitalWrite(espResetPin, HIGH);
+  delay(3000);
+
+}
+
+
+void send_Temp(){
+  int tempToSend;
+  sensors.requestTemperatures();//Send command to get temperature reading
+  tempToSend = sensors.getTempFByIndex(0);
+
+   StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["type"] = "tempUpdate";
+  root["temp"] = tempToSend;
+  String message;
+  int isReady = 0;
+  root.printTo(message);
+  message.toCharArray(outbuffer, 100);
+  Serial.println(outbuffer);
+
+}
